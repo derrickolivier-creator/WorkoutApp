@@ -1,4 +1,27 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+
+// ─── localStorage helpers ─────────────────────────────────────────────────────
+
+const LS_KEYS = {
+  sessions:    'gainz_sessions',
+  totalPts:    'gainz_totalPts',
+  badges:      'gainz_badges',
+  activeWeek:  'gainz_activeWeek',
+  activeDayIdx:'gainz_activeDayIdx',
+};
+
+function lsGet(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw !== null ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function lsSet(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -206,13 +229,31 @@ function Badge({ week, earned }) {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 export default function WorkoutApp() {
-  const [view, setView]               = useState('workout');
-  const [activeWeek, setActiveWeek]   = useState(1);
-  const [activeDayIdx, setActiveDayIdx] = useState(0);
-  const [sessions, setSessions]       = useState(buildSessions);
-  const [totalPts, setTotalPts]       = useState(0);
-  const [badges, setBadges]           = useState({ 1: false, 2: false, 3: false, 4: false });
-  const [celebration, setCelebration] = useState(null);
+  const [view, setView]                 = useState('workout');
+  const [activeWeek, setActiveWeek]     = useState(() => lsGet(LS_KEYS.activeWeek, 1));
+  const [activeDayIdx, setActiveDayIdx] = useState(() => lsGet(LS_KEYS.activeDayIdx, 0));
+  const [sessions, setSessions]         = useState(() => lsGet(LS_KEYS.sessions, null) ?? buildSessions());
+  const [totalPts, setTotalPts]         = useState(() => lsGet(LS_KEYS.totalPts, 0));
+  const [badges, setBadges]             = useState(() => lsGet(LS_KEYS.badges, { 1: false, 2: false, 3: false, 4: false }));
+  const [celebration, setCelebration]   = useState(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  // Persist state to localStorage whenever it changes
+  useEffect(() => { lsSet(LS_KEYS.sessions,     sessions);    }, [sessions]);
+  useEffect(() => { lsSet(LS_KEYS.totalPts,     totalPts);    }, [totalPts]);
+  useEffect(() => { lsSet(LS_KEYS.badges,       badges);      }, [badges]);
+  useEffect(() => { lsSet(LS_KEYS.activeWeek,   activeWeek);  }, [activeWeek]);
+  useEffect(() => { lsSet(LS_KEYS.activeDayIdx, activeDayIdx);}, [activeDayIdx]);
+
+  const resetProgress = useCallback(() => {
+    Object.values(LS_KEYS).forEach(k => localStorage.removeItem(k));
+    setSessions(buildSessions());
+    setTotalPts(0);
+    setBadges({ 1: false, 2: false, 3: false, 4: false });
+    setActiveWeek(1);
+    setActiveDayIdx(0);
+    setConfirmReset(false);
+  }, []);
 
   const session = sessions[activeWeek][activeDayIdx];
 
@@ -607,6 +648,38 @@ export default function WorkoutApp() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Reset progress */}
+            <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700">
+              <p className="text-xs font-bold text-gray-300 uppercase tracking-widest mb-1">Data</p>
+              <p className="text-xs text-gray-500 mb-3">Progress is saved automatically to this browser.</p>
+              {!confirmReset ? (
+                <button
+                  onClick={() => setConfirmReset(true)}
+                  className="w-full py-2.5 rounded-xl text-sm font-semibold border border-red-800 text-red-400 bg-red-900/20 hover:bg-red-900/40 transition-all"
+                >
+                  Reset all progress
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-red-300 font-semibold text-center">This will erase everything. Sure?</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setConfirmReset(false)}
+                      className="py-2.5 rounded-xl text-sm font-semibold border border-gray-600 text-gray-300 hover:border-gray-500 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={resetProgress}
+                      className="py-2.5 rounded-xl text-sm font-bold bg-red-700 hover:bg-red-600 text-white transition-all"
+                    >
+                      Yes, reset
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
